@@ -8,20 +8,17 @@ pub fn backup_file(path: &str) -> Option<PathBuf> {
         return None;
     }
 
-    let timestamp = Utc::now().timestamp();
-    let file_name = src.file_name()?.to_string_lossy();
-
-    let backup_dir = Path::new("C:\\ProgramData\\EnterpriseGuard\\backup");
+    let backup_dir = "C:\\ProgramData\\EnterpriseGuard\\backup";
     let _ = fs::create_dir_all(backup_dir);
 
-    let backup_path = backup_dir.join(format!(
-        "{}_{}",
-        timestamp,
-        file_name
-    ));
+    let filename = src.file_name()?.to_string_lossy();
+    let backup_path = format!(
+        "{}\\{}_{}",
+        backup_dir,
+        Utc::now().timestamp(),
+        filename
+    );
 
-    match fs::copy(src, &backup_path) {
-        Ok(_) => Some(backup_path),
-        Err(_) => None,
-    }
+    fs::copy(src, &backup_path).ok()?;
+    Some(PathBuf::from(backup_path))
 }

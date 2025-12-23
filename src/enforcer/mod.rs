@@ -2,3 +2,8 @@ pub mod soft_block;
 pub mod restore;
 pub mod damage_tracker;
 pub mod backup;
+pub mod acl;
+pub mod folder_lock;
+pub mod proactive;
+pub mod unlock;
+pub mod exclusions;

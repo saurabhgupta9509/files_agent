@@ -1,13 +1,13 @@
-use notify::{Watcher, RecursiveMode, EventKind};
+use notify::{ Watcher, RecursiveMode, EventKind };
 use std::sync::mpsc::channel;
 use std::path::Path;
 use crate::agent::state::AgentState;
-use crate::monitor::event_mapper::{FsAction, map_event};
+use crate::monitor::event_mapper::{ FsAction, map_event };
 use crate::rules::matcher::match_rule;
 use crate::rules::action::RuleAction;
-use crate::rules::operation::{self, Operation};
+use crate::rules::operation::{ self, Operation };
 
-pub fn start_watching(paths: Vec<String> , state: AgentState) {
+pub fn start_watching(paths: Vec<String>, state: AgentState) {
     let (tx, rx) = channel();
 
     let mut watcher = notify::recommended_watcher(tx).expect("Failed to create watcher");
@@ -16,7 +16,7 @@ pub fn start_watching(paths: Vec<String> , state: AgentState) {
     //     watcher.watch(Path::new(&path), RecursiveMode::Recursive).unwrap();
     // }
 
-      for p in paths {
+    for p in paths {
         let path = Path::new(&p);
 
         if !path.exists() {
@@ -34,10 +34,10 @@ pub fn start_watching(paths: Vec<String> , state: AgentState) {
             Err(e) => log::error!("❌ Failed to watch {}: {:?}", p, e),
         }
     }
-    
+
     for res in rx {
         match res {
-            Ok(event) => handle_event(event , state.clone()),
+            Ok(event) => handle_event(event, state.clone()),
             Err(e) => println!("watch error: {:?}", e),
         }
     }
@@ -50,124 +50,70 @@ pub fn handle_event(event: notify::Event, state: AgentState) {
     }
     drop(features);
 
-
     let action = map_event(&event);
     if action.is_none() {
         return;
     }
 
-   let fs_action = action.unwrap();
+    let fs_action = action.unwrap();
     let operation: Operation = fs_action.into();
-
-   let path = event.paths.get(0).map(|p| p.to_string_lossy().to_string());
-        if path.is_none() {
-            return;
-        }
+   
+    let path = event.paths.get(0).map(|p| p.to_string_lossy().to_string());
+    if path.is_none() {
+        return;
+    }
 
     let path = path.unwrap();
-
-
-
-     handle_decision(path, operation, state);
+    if operation == Operation::Delete {
+            let _ = crate::enforcer::backup::backup_file(&path);
+    }
+    handle_decision(path, operation, state);
     // send event
-
 }
 
-  pub async fn handle_fs_event(
-    event_path: String,
-    operation: Operation,
-    is_directory: bool,
-    agent_state: AgentState,
-) {
-    // 1️⃣ Feature flags check
+pub fn handle_decision(event_path: String, operation: Operation, agent_state: AgentState) {
     let features = agent_state.features.read().unwrap();
     if !features.fs_monitoring {
         return;
     }
     drop(features);
 
-    // 2️⃣ Get rules snapshot
     let rules = agent_state.get_rules();
-
-    // 3️⃣ Match rule
     let matched_rule = match_rule(&event_path, &operation, &rules);
 
-    // 4️⃣ Decision
     match matched_rule {
-        Some(rule) => {
+        Some(rule) =>
             match rule.action {
                 RuleAction::Allow => {
-                    log::info!(
-                        "[ALLOW] {} {:?}",
-                        event_path,
-                        operation
-                    );
+                    log::info!("[ALLOW] {} {:?}", event_path, operation);
                 }
-
                 RuleAction::Monitor => {
-                    log::warn!(
-                        "[MONITOR] Rule={} {} {:?}",
-                        rule.rule_id,
-                        event_path,
-                        operation
-                    );
+                    log::warn!("[MONITOR] Rule={} {} {:?}", rule.rule_id, event_path, operation);
                 }
-
-                RuleAction::Block => {
-                    log::error!(
-                        "[BLOCK - not enforced yet] Rule={} {} {:?}",
-                        rule.rule_id,
-                        event_path,
-                        operation
-                    );
-                    // 🚫 Actual blocking comes in Phase 4
-                }
-            }
-        }
-
-        None => {
-            // No rule matched → default allow
-            log::info!(
-                "[DEFAULT ALLOW] {} {:?}",
-                event_path,
-                operation
-            );
-        }
-    }
-}
-
-pub fn handle_decision(
-    event_path: String,
-    operation: Operation,
-    agent_state: AgentState,
-) {
-    let features = agent_state.features.read().unwrap();
-    if !features.fs_monitoring {
-        return;
-    }
-    drop(features);
-
-    let rules = agent_state.get_rules();
-    let matched_rule = match_rule(&event_path, &operation, &rules);
-
-    match matched_rule {
-        Some(rule) => match rule.action {
-            RuleAction::Allow => {
-                log::info!("[ALLOW] {} {:?}", event_path, operation);
-            }
-            RuleAction::Monitor => {
-                log::warn!(
-                    "[MONITOR] Rule={} {} {:?}",
-                    rule.rule_id, event_path, operation
-                );
-            }
-            RuleAction::Block => {
+                // RuleAction::Block => {
+                //     log::error!(
+                //         "[BLOCK - future] Rule={} {} {:?}",
+                //         rule.rule_id,
+                //         event_path,
+                //         operation
+                //     );
+                // }
+                 RuleAction::Block => {
                 log::error!(
-                    "[BLOCK - future] Rule={} {} {:?}",
-                    rule.rule_id, event_path, operation
+                    "[BLOCK] Rule={} {} {:?}",
+                    rule.rule_id,
+                    event_path,
+                    operation
                 );
+
+                // 🔐 Phase 4.1 enforcement
+                if matches!(operation, Operation::Modify | Operation::Create) {
+                    if std::path::Path::new(&event_path).is_file() {
+                    crate::enforcer::acl::deny_all_access(&event_path);
+                }
+                }
             }
-        },
+            }
         None => {
             log::info!("[DEFAULT ALLOW] {} {:?}", event_path, operation);
         }
