@@ -53,4 +53,22 @@ impl AgentState {
         let rules = self.rules.read().unwrap();
         rules.clone()
     }
+
+
+
+
+
+    //// aplly rules 
+    //  let old_rules = rules.clone();
+    //     *rules = new_rules.clone();
+
+    //     // ✅ THIS IS THE KEY LINE
+    //     apply_rules(old_rules, new_rules);
+    // }
+
+    // pub fn get_rules(&self) -> Vec<Rule> {
+    //     self.rules.read().unwrap().clone()
+    // }
+
+
 }

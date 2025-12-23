@@ -7,3 +7,4 @@ pub mod folder_lock;
 pub mod proactive;
 pub mod unlock;
 pub mod exclusions;
+pub mod path_type;

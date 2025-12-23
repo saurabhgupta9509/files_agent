@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     agent_state.update_rules(
         vec![Rule {
             rule_id: "block-modify".to_string(),
-            path: "D:\\Agentstarts".to_string(),
+            path: "D:\\Agentstarts\\Agentstarts".to_string(),
             recursive: true,
             operations: vec![],
             action: RuleAction::Block,
